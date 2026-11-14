@@ -17,23 +17,45 @@ export struct MusicHome {
   @StorageLink('pm_time') currentTime: number = 0
   @StorageLink('pm_duration') duration: number = 0
 
+  // 解析缓存：build 期间同一份 JSON 会被访问多次，缓存后只解析一次
+  private recentCacheKey: string = ''
+  private recentCache: SongItem[] = []
+  private songCacheKey: string = ''
+  private songCache: SongDetail | null = null
+
   private getRecent(): SongItem[] {
-    try {
-      return JSON.parse(this.recentStr) as SongItem[]
-    } catch (e) {
-      return []
+    if (this.recentCacheKey === this.recentStr) {
+      return this.recentCache
     }
+    let list: SongItem[] = []
+    try {
+      list = JSON.parse(this.recentStr) as SongItem[]
+    } catch (e) {
+      list = []
+    }
+    this.recentCacheKey = this.recentStr
+    this.recentCache = list
+    return list
   }
 
   private getCurrentSong(): SongDetail | null {
     if (!this.songStr) {
+      this.songCacheKey = ''
+      this.songCache = null
       return null
     }
+    if (this.songCacheKey === this.songStr) {
+      return this.songCache
+    }
+    let song: SongDetail | null = null
     try {
-      return JSON.parse(this.songStr) as SongDetail
+      song = JSON.parse(this.songStr) as SongDetail
     } catch (e) {
-      return null
+      song = null
     }
+    this.songCacheKey = this.songStr
+    this.songCache = song
+    return song
   }
 
   aboutToAppear() {

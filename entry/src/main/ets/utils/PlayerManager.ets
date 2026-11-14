@@ -2,6 +2,7 @@ import { media } from '@kit.MediaKit'
 import { common, wantAgent } from '@kit.AbilityKit'
 import { avSession } from '@kit.AVSessionKit'
 import { image } from '@kit.ImageKit'
+import { BusinessError } from '@kit.BasicServicesKit'
 import { http } from '@kit.NetworkKit'
 import { SongItem, SongDetail } from '../viewmodles/commons'
 import { MUSIC_free_API } from '../apis'
@@ -24,12 +25,16 @@ class PlayerManager {
   private avPlayer: media.AVPlayer | null = null
   private session: avSession.AVSession | null = null
   private context: common.UIAbilityContext | null = null
-
   playlist: SongItem[] = []
   currentIndex: number = -1
   currentSong: SongDetail | null = null
-
   private isSeeking: boolean = false
+  /** 当前歌词行缓存：避免 timeUpdate 回调里反复 JSON.parse 全量歌词 */
+  private lrcLines: LrcLine[] = []
+  /** 播放请求序号：快速切歌时用于丢弃过期请求的回包 */
+  private playSeq: number = 0
+  /** AVSession 封面像素图引用：切歌时释放上一张，避免内存持续增长 */
+  private coverPixelMap: image.PixelMap | null = null
 
   static getInstance(): PlayerManager {
     if (!PlayerManager.instance) {
@@ -61,18 +66,25 @@ class PlayerManager {
   private syncSong() {
     AppStorage.setOrCreate('pm_song', this.currentSong ? JSON.stringify(this.currentSong) : '')
   }
+
   private syncPlaying(playing: boolean) {
     AppStorage.setOrCreate('pm_playing', playing)
   }
+
   private syncTime(sec: number) {
     AppStorage.setOrCreate('pm_time', sec)
   }
+
   private syncDuration(sec: number) {
     AppStorage.setOrCreate('pm_duration', sec)
   }
+
   private syncLrc(lines: LrcLine[]) {
+    // 同时刷新内部缓存，供播放进度回调直接使用
+    this.lrcLines = lines
     AppStorage.setOrCreate('pm_lrc', JSON.stringify(lines))
   }
+
   private syncLrcIndex(idx: number) {
     AppStorage.setOrCreate('pm_lrcIndex', idx)
   }
@@ -80,14 +92,25 @@ class PlayerManager {
   // ============ 播放控制 ============
   /** 播放指定列表中的某首歌 */
   async play(playlist: SongItem[], index: number) {
-    this.playlist = playlist
-    this.currentIndex = index
     const song = playlist[index]
     if (!song) {
       return
     }
-    // 获取歌曲详情
-    const detail = await MUSIC_free_API(song.name, song.index)
+    const seq = ++this.playSeq
+    this.playlist = playlist
+    this.currentIndex = index
+    // 获取歌曲详情：网络异常时保持当前播放不中断
+    let detail: SongDetail
+    try {
+      detail = await MUSIC_free_API(song.name, song.index)
+    } catch (e) {
+      console.error('MUSIC_free_API error:', JSON.stringify(e))
+      return
+    }
+    // 请求期间用户已切歌，丢弃本次过期回包
+    if (seq !== this.playSeq) {
+      return
+    }
     this.currentSong = detail
     this.syncSong()
     this.syncDuration(detail.duration_sec ?? 0)
@@ -97,8 +120,13 @@ class PlayerManager {
     this.syncLrcIndex(-1)
     // 存入最近播放
     this.addRecent(song)
-    // 启动播放
-    await this.startPlayer(detail.play_url)
+    // 启动播放：失败时只记录日志，避免抛出未捕获的 Promise 异常
+    try {
+      await this.startPlayer(detail.play_url)
+    } catch (e) {
+      console.error('startPlayer error:', JSON.stringify(e))
+      return
+    }
     // AVSession
     await this.createSession()
     await this.updateSessionMetadata()
@@ -109,10 +137,16 @@ class PlayerManager {
     if (!this.avPlayer) {
       return
     }
-    if (AppStorage.get<boolean>('pm_playing')) {
-      this.avPlayer.pause()
+    const player = this.avPlayer
+    // 播放器可能处于 idle/released 状态，统一兜底避免未捕获的 Promise 异常
+    if (AppStorage.get<boolean>('pm_playing') === true) {
+      player.pause().catch((err: BusinessError) => {
+        console.error('pause error:', err.code, err.message)
+      })
     } else {
-      this.avPlayer.play()
+      player.play().catch((err: BusinessError) => {
+        console.error('play error:', err.code, err.message)
+      })
     }
   }
 
@@ -122,7 +156,9 @@ class PlayerManager {
       return
     }
     this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length
-    this.play(this.playlist, this.currentIndex)
+    this.play(this.playlist, this.currentIndex).catch((err: BusinessError) => {
+      console.error('playPrev error:', err.code, err.message)
+    })
   }
 
   /** 下一首 */
@@ -131,7 +167,9 @@ class PlayerManager {
       return
     }
     this.currentIndex = (this.currentIndex + 1) % this.playlist.length
-    this.play(this.playlist, this.currentIndex)
+    this.play(this.playlist, this.currentIndex).catch((err: BusinessError) => {
+      console.error('playNext error:', err.code, err.message)
+    })
   }
 
   /** 跳转到指定秒数 */
@@ -140,6 +178,10 @@ class PlayerManager {
       this.isSeeking = true
       this.syncTime(sec)
       this.avPlayer.seek(sec * 1000)
+      // seekDone 未回调时兜底解锁，避免进度条长期停留在拖动状态
+      setTimeout(() => {
+        this.isSeeking = false
+      }, 1000)
     }
   }
 
@@ -178,6 +220,7 @@ class PlayerManager {
             this.updateSessionPlayState(true)
             if (!resolved) {
               resolved = true
+              clearTimeout(initTimer)
               resolve()
             }
           } else if (state === 'paused' || state === 'stopped') {
@@ -205,17 +248,14 @@ class PlayerManager {
 
         player.on('timeUpdate', (time: number) => {
           if (!this.isSeeking) {
-            const sec = Math.floor(time / 1000)
-            this.syncTime(sec)
-            const lrcStr = AppStorage.get<string>('pm_lrc')
-            if (lrcStr) {
-              try {
-                const lines = JSON.parse(lrcStr) as LrcLine[]
-                if (lines.length > 0) {
-                  this.syncLrcIndex(findLrcIndex(lines, time))
-                }
-              } catch (e) {
-                // ignore
+            this.syncTime(Math.floor(time / 1000))
+            // 直接复用内存中的歌词缓存，避免高频回调里重复解析 JSON
+            const lines: LrcLine[] = this.lrcLines
+            if (lines.length > 0) {
+              const idx: number = findLrcIndex(lines, time)
+              // 仅在歌词行真正变化时更新全局状态，减少无谓的 UI 刷新
+              if (idx !== (AppStorage.get<number>('pm_lrcIndex') ?? -1)) {
+                this.syncLrcIndex(idx)
               }
             }
           }
@@ -304,10 +344,22 @@ class PlayerManager {
     }
   }
 
+  /** 释放 AVSession 封面像素图（可重复调用） */
+  private releaseCoverPixelMap(): void {
+    if (this.coverPixelMap) {
+      this.coverPixelMap.release().catch(() => {
+        // 释放失败不影响播放主流程，忽略
+      })
+      this.coverPixelMap = null
+    }
+  }
+
   private async updateSessionMetadata() {
     if (!this.session || !this.currentSong) {
       return
     }
+    // 释放上一首的封面像素图，避免反复切歌造成内存占用持续增长
+    this.releaseCoverPixelMap()
     try {
       const metadata: avSession.AVMetadata = {
         assetId: this.currentSong.id ?? '',
@@ -318,15 +370,21 @@ class PlayerManager {
       if (this.currentSong.cover_url) {
         try {
           const httpRequest = http.createHttp()
-          const response = await httpRequest.request(this.currentSong.cover_url, {
-            method: http.RequestMethod.GET,
-            expectDataType: http.HttpDataType.ARRAY_BUFFER,
-          })
-          httpRequest.destroy()
-          if (response.responseCode === 200 && response.result) {
-            const imageSource = image.createImageSource(response.result as ArrayBuffer)
-            const pixelMap = await imageSource.createPixelMap()
-            metadata.mediaImage = pixelMap
+          try {
+            const response = await httpRequest.request(this.currentSong.cover_url, {
+              method: http.RequestMethod.GET,
+              expectDataType: http.HttpDataType.ARRAY_BUFFER,
+            })
+            if (response.responseCode === 200 && response.result) {
+              const imageSource = image.createImageSource(response.result as ArrayBuffer)
+              const pixelMap = await imageSource.createPixelMap()
+              metadata.mediaImage = pixelMap
+              this.coverPixelMap = pixelMap
+              await imageSource.release()
+            }
+          } finally {
+            // 无论请求成功与否都释放 http 句柄
+            httpRequest.destroy()
           }
         } catch (imgErr) {
           console.error('load cover image error:', JSON.stringify(imgErr))
@@ -367,7 +425,8 @@ class PlayerManager {
         this.session.off('pause')
         this.session.off('playNext')
         this.session.off('playPrevious')
-        this.session.deactivate().catch(() => {})
+        this.session.deactivate().catch(() => {
+        })
         this.session = null
       } catch (e) {
         console.error('destroySession error:', JSON.stringify(e))
@@ -381,6 +440,7 @@ class PlayerManager {
       BackgroundUtil.startContinuousTask(this.context)
     }
   }
+
   private stopBgTask() {
     if (this.context) {
       BackgroundUtil.stopContinuousTask(this.context)
@@ -445,6 +505,8 @@ class PlayerManager {
     this.stopBgTask()
     this.destroySession()
     this.releasePlayer()
+    this.releaseCoverPixelMap()
+    this.lrcLines = []
   }
 }
 

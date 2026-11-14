@@ -1,7 +1,7 @@
 import { HMNavigation, HMRouterMgr } from '@hadss/hmrouter'
 import { AttributeUpdater } from '@kit.ArkUI'
 import { GlobalVariable, Throttle } from 'library'
-import { gerEPIC_free_game_API, gerEPIC_free_game_MOCK_API } from '../apis'
+import { getEPIC_free_game_API } from '../apis'
 import { GameItem } from '../viewmodles/commons'
 import { OtherHome } from '../components/OtherHome'
 import { MusicHome } from '../components/MusicHome'
@@ -22,7 +22,6 @@ struct Index {
   @StorageProp(GlobalVariable.SAFE_TOP_HEIGHT)
   topHeight: number = 0
   @State refreshIng: boolean = false // 控制下拉刷新
-  @State refreshStatus: RefreshStatus = RefreshStatus.Inactive
   private refreshThrottle: Throttle = new Throttle(3000) // 刷新节流：3 秒内最多请求一次
   private clickThrottle: Throttle = new Throttle(800) // 点击节流：首次立即跳转，800ms 内重复点击忽略
   @State selectedPlatform: string = '' // 已选择进入的平台，空字符串表示还在选择页
@@ -50,10 +49,7 @@ struct Index {
 
   async getEPIC() {
     try {
-      // 测试阶段用假数据，接真实接口时换成 gerEPIC_free_game_API()
-      // this.list = await gerEPIC_free_game_MOCK_API()
-      this.list = await gerEPIC_free_game_API()
-
+      this.list = await getEPIC_free_game_API()
     } catch (e) {
       console.error('getEPIC error:', JSON.stringify(e))
     } finally {
@@ -84,7 +80,11 @@ struct Index {
 
   // "2026-11-06 00:00:00" -> "11.06"
   formatDate(date: string): string {
-    return date.substring(5, 10).replace('-', '.')
+    if (!date || date.length < 10) {
+      // 数据缺失或格式异常时原样返回，避免 substring 越界与臆造内容
+      return date ?? ''
+    }
+    return date.substring(5, 10).replace(/-/g, '.')
   }
 
   // 根据平台 key 取平台显示名

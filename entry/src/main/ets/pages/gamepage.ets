@@ -29,13 +29,23 @@ export struct GamePage {
 
   // "2026-11-06 00:00:00" -> "2026.11.06"
   formatDate(date: string): string {
-    return date.substring(0, 10).replaceAll('-', '.')
+    if (!date || date.length < 10) {
+      // 数据缺失或格式异常时原样返回，避免 substring 越界
+      return date ?? ''
+    }
+    return date.substring(0, 10).replace(/-/g, '.')
   }
 
   // 倒计时：还剩 X 天 X 小时
   getCountdown(): string {
-    const endTime = this.gameMessage.end_time.replaceAll('-', '/')
+    if (!this.gameMessage.end_time) {
+      return ''
+    }
+    const endTime = this.gameMessage.end_time.replace(/-/g, '/')
     const diff = new Date(endTime).getTime() - Date.now()
+    if (isNaN(diff)) {
+      return ''
+    }
     if (diff <= 0) {
       return '已结束'
     }

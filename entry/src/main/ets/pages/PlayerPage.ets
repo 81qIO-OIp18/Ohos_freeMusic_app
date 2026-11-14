@@ -40,26 +40,50 @@ export struct PlayerPage {
     }
   }
 
+  // 解析缓存：SongDetail 含歌词全文，build 期间多次解析代价高
+  private songCacheKey: string = ''
+  private songCache: SongDetail | null = null
+  private lrcCacheKey: string = ''
+  private lrcCache: LrcLine[] = []
+
   private getSong(): SongDetail | null {
     if (!this.songStr) {
+      this.songCacheKey = ''
+      this.songCache = null
       return null
     }
+    if (this.songCacheKey === this.songStr) {
+      return this.songCache
+    }
+    let song: SongDetail | null = null
     try {
-      return JSON.parse(this.songStr) as SongDetail
+      song = JSON.parse(this.songStr) as SongDetail
     } catch (e) {
-      return null
+      song = null
     }
+    this.songCacheKey = this.songStr
+    this.songCache = song
+    return song
   }
 
   private getLrcLines(): LrcLine[] {
     if (!this.lrcStr) {
-      return []
+      this.lrcCacheKey = ''
+      this.lrcCache = []
+      return this.lrcCache
     }
+    if (this.lrcCacheKey === this.lrcStr) {
+      return this.lrcCache
+    }
+    let lines: LrcLine[] = []
     try {
-      return JSON.parse(this.lrcStr) as LrcLine[]
+      lines = JSON.parse(this.lrcStr) as LrcLine[]
     } catch (e) {
-      return []
+      lines = []
     }
+    this.lrcCacheKey = this.lrcStr
+    this.lrcCache = lines
+    return lines
   }
 
   build() {

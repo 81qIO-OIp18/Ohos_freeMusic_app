@@ -37,8 +37,8 @@ export default class EntryAbility extends UIAbility {
         }
         hilog.info(DOMAIN, 'testTag', '%{public}s', 'Succeeded in loading the content.');
       });
-    }).catch(() => {
-      hilog.error(DOMAIN, 'testTag', 'StorageManager init failed: %{public}s');
+    }).catch((e: Error) => {
+      hilog.error(DOMAIN, 'testTag', 'StorageManager init failed: %{public}s', JSON.stringify(e));
       windowStage.loadContent('pages/Index', (err) => {
         if (err.code) {
           hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));

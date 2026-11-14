@@ -57,16 +57,23 @@ export function findLrcIndex(lines: LrcLine[], currentMs: number): number {
   if (lines.length === 0) {
     return -1
   }
+  // 歌词时间轴按升序排列，用二分查找把播放进度回调中的 O(n) 扫描降为 O(log n)
+  let low = 0
+  let high = lines.length - 1
   let idx = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].time <= currentMs) {
-      idx = i
+  while (low <= high) {
+    const mid = (low + high) >> 1
+    if (lines[mid].time <= currentMs) {
+      idx = mid
+      low = mid + 1
     } else {
-      break
+      high = mid - 1
     }
   }
   return idx
 }
+
+const pad2 = (n: number): string => n.toString().padStart(2, '0')
 
 /**
  * 毫秒数格式化为 mm:ss（超过一小时显示 hh:mm:ss）
@@ -79,6 +86,5 @@ export function fmtMs(ms: number): string {
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
+  return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`
 }

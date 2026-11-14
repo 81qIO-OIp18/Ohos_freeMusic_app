@@ -6,9 +6,14 @@ import { promptAction } from '@kit.ArkUI';
 
 export const Base_Url: string = ""
 
+/** 统一成功码：各上游接口成功码不统一，集中维护 */
+const SUCCESS_CODES: number[] = [10000, 1, 200]
+/** 请求超时时间（毫秒）：境外 API 响应较慢，保留较长等待 */
+const REQUEST_TIMEOUT: number = 1000000
+
 const instance = axios.create({
   baseURL: Base_Url, // 请求基础地址
-  timeout: 1000000 // 超时时间 10秒，境外API响应慢
+  timeout: REQUEST_TIMEOUT
 })
 // 发送数据之前 夹带一丝私货
 // 注册请求拦截器1.成功 2.失败
@@ -32,17 +37,16 @@ instance.interceptors.response.use((response: AxiosResponse) => {
   // 业务状态
   const res = response.data as ResponseData // 定义数据
   // 兼容多种成功码：10000、1、200 等
-  if (res.code === 10000 || res.code === 1 || res.code === 200) {
-    // 此时说明请求成功
-    return response.data.data // fullfiled // 这里注意： 不能用res.data返回
-
-    // any类型 没有类型 any类型 any类型可以认为是任何类型
-    // any类型可以认为是任意类型
+  if (SUCCESS_CODES.includes(res.code)) {
+    return response.data.data // 这里注意：不能用 res.data 返回
   }
-  // 一定失败了
-  promptAction.showToast({ message: res.message }) // 提示消息
-  return Promise.reject(new Error(res.message)) // pending fullfiled rejected
-  // 假如新增一个用户- 接口调用成功了没有代码错误 业务没有成功
+  // 业务失败：提示用户
+  try {
+    promptAction.showToast({ message: res.message })
+  } catch (e) {
+    // 非 UI 上下文（如启动阶段）调用 toast 会抛异常，忽略提示即可
+  }
+  return Promise.reject(new Error(res.message))
 }, (error: AxiosError) => {
   // 就让她失败
   // 把error传进入 告诉失败的原因

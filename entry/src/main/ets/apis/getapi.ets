@@ -1,7 +1,7 @@
 import { HMRequest, HTTP_PATH } from "library";
 import { GameItem, MusicPlaylistRespData, SongDetail } from "../viewmodles/commons";
 
-export const gerEPIC_free_game_API = (): Promise<GameItem[]> => HMRequest.get<GameItem[]>(HTTP_PATH.EPIC_FREE_GAME)
+export const getEPIC_free_game_API = (): Promise<GameItem[]> => HMRequest.get<GameItem[]>(HTTP_PATH.EPIC_FREE_GAME)
 
 /**
  * 搜索歌曲列表（format=json）
@@ -146,7 +146,7 @@ const MOCK_GAME_LIST: GameItem[] = [
 ]
 
 // 假数据接口，带 1.5 秒延时模拟网络加载
-export const gerEPIC_free_game_MOCK_API = (): Promise<GameItem[]> => {
+export const getEPIC_free_game_MOCK_API = (): Promise<GameItem[]> => {
   return new Promise<GameItem[]>((resolve) => {
     setTimeout(() => resolve(MOCK_GAME_LIST), 1500)
   })

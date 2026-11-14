@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
-import { SongItem, MusicPlaylistRespData } from '../viewmodles/commons'
+import { SongItem } from '../viewmodles/commons'
 import { MUSIC_free_list_API } from '../apis'
 import { playerManager } from '../utils/PlayerManager'
 import { StorageManager } from '../utils/StorageManager'
@@ -197,7 +197,7 @@ export struct SearchPage {
           .justifyContent(FlexAlign.Center)
         } else {
           List({ space: 2 }) {
-            ForEach(this.results, (song: SongItem) => {
+            ForEach(this.results, (song: SongItem, index: number) => {
               ListItem() {
                 Row() {
                   Column() {
@@ -224,9 +224,9 @@ export struct SearchPage {
                 .padding({ left: 4, right: 4, top: 12, bottom: 12 })
               }
               .onClick(() => {
-                playerManager.play(this.results, this.results.indexOf(song))
+                playerManager.play(this.results, index)
               })
-            }, (song: SongItem) => `${song.index}_${song.name}`)
+            }, (song: SongItem, index: number) => `${index}_${song.index}_${song.name}`)
           }
           .width('100%')
           .layoutWeight(1)
