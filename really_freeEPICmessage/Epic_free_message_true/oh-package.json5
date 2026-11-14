@@ -1,0 +1,13 @@
+{
+  "modelVersion": "26.0.0",
+  "description": "Please describe the basic information.",
+  "dependencies": {
+    "@hadss/hmrouter": "^1.2.4",
+    "@hadss/hmrouter-transitions": "^1.2.4"
+  },
+  "devDependencies": {
+    "@ohos/hypium": "1.0.25",
+    "@ohos/hamock": "1.0.0"
+  },
+  "dynamicDependencies": {}
+}

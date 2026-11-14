@@ -1,0 +1,60 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_true_Sc4YT9N13XJOD_UbwTt72pCfbXy50u8Fx8Dwl3dpaGY=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B0680AA009EEC05563980464E5796FC9BE3763C04BFB632639C80FA6A0A3537C551B38A7C8F8B22",
+          "profile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_true_Sc4YT9N13XJOD_UbwTt72pCfbXy50u8Fx8Dwl3dpaGY=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_true_Sc4YT9N13XJOD_UbwTt72pCfbXy50u8Fx8Dwl3dpaGY=.p12",
+          "storePassword": "0000001BB5973628F0E5446C35F0D6FFE46595A9F07E6A48362CEC9016B4AFE2E3411394E284C8D32648E0"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "26.0.0",
+        "compatibleSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "library",
+      "srcPath": "./library",
+    }
+  ]
+}
