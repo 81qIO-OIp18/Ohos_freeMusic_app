@@ -1,8 +1,13 @@
 import { media } from '@kit.MediaKit'
 import { promptAction } from '@kit.ArkUI'
+import { common, wantAgent } from '@kit.AbilityKit'
+import { avSession } from '@kit.AVSessionKit'
+import { image } from '@kit.ImageKit'
+import { http } from '@kit.NetworkKit'
 import { SongItem, SongDetail } from '../viewmodles/commons'
 import { MUSIC_free_list_API, MUSIC_free_API } from '../apis'
 import { parseLrc, findLrcIndex, fmtMs, LrcLine } from '../utils/LrcUtils'
+import { BackgroundUtil } from '../utils/BackgroundUtil'
 
 /**
  * 免费音乐首页（搜索 + 播放）
@@ -27,6 +32,7 @@ export struct MusicHome {
   @State showFullPlayer: boolean = false // 是否展开全屏播放器
   @State isSeeking: boolean = false // 是否正在拖动进度条
   avPlayer: media.AVPlayer | null = null
+  session: avSession.AVSession | null = null
 
   // 搜索
   private async doSearch() {
@@ -87,6 +93,9 @@ export struct MusicHome {
       // 解析歌词
       this.lrcLines = detail.lyric ? parseLrc(detail.lyric) : []
       this.lrcIndex = -1
+      // 创建/更新 AVSession
+      await this.createSession()
+      await this.updateSessionMetadata()
       await this.startPlayer(detail.play_url)
     } catch (e) {
       console.error('playSong error:', JSON.stringify(e))
@@ -143,11 +152,18 @@ export struct MusicHome {
           initializedResolve()
         } else if (state === 'playing') {
           this.isPlaying = true
+          this.updateSessionPlayState(true)
+          // 播放时（前台）启动后台长时任务，保证退后台后继续播放
+          this.startBgTask()
         } else if (state === 'paused' || state === 'stopped') {
           this.isPlaying = false
+          this.updateSessionPlayState(false)
+          this.stopBgTask()
         } else if (state === 'completed') {
           // 播放完成，自动下一首
           this.isPlaying = false
+          this.updateSessionPlayState(false)
+          this.stopBgTask()
           this.playNext()
         }
       })
@@ -155,6 +171,7 @@ export struct MusicHome {
       player.on('error', (err: BusinessError) => {
         console.error(`AVPlayer error event: code=${err.code}, message=${err.message}`)
         this.isPlaying = false
+        this.stopBgTask()
         clearTimeout(initTimer)
         initializedReject(new Error(`播放器错误:${err.code}`))
       })
@@ -205,7 +222,163 @@ export struct MusicHome {
     if (!this.avPlayer || this.duration <= 0) {
       return
     }
-    this.avPlayer.seek(sec * 1000,)
+    this.avPlayer.seek(sec * 1000)
+  }
+
+  // 启动后台长时任务（音频播放保活）
+  private startBgTask() {
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext
+      BackgroundUtil.startContinuousTask(ctx)
+    } catch (e) {
+      console.error('startBgTask error:', JSON.stringify(e))
+    }
+  }
+
+  // 停止后台长时任务
+  private stopBgTask() {
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext
+      BackgroundUtil.stopContinuousTask(ctx)
+    } catch (e) {
+      console.error('stopBgTask error:', JSON.stringify(e))
+    }
+  }
+
+  // 创建并激活 AVSession（向系统注册媒体会话，后台播放必需）
+  private async createSession() {
+    if (this.session) {
+      return
+    }
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext
+      this.session = await avSession.createAVSession(ctx, 'MusicFreeSession', 'audio')
+      await this.session.activate()
+      console.info('AVSession created and activated')
+      // 设置启动 Ability（点击通知栏媒体控制回到应用）
+      const wantAgentInfo: wantAgent.WantAgentInfo = {
+        wants: [{
+          bundleName: ctx.abilityInfo.bundleName,
+          abilityName: ctx.abilityInfo.name,
+        }],
+        actionType: wantAgent.OperationType.START_ABILITY,
+        requestCode: 0,
+        wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG],
+      }
+      const agent = await wantAgent.getWantAgent(wantAgentInfo)
+      await this.session.setLaunchAbility(agent)
+      // 注册系统媒体控制命令监听（通知栏/锁屏的播放控制按钮）
+      this.setSessionCommandListeners()
+    } catch (e) {
+      console.error('createSession error:', JSON.stringify(e))
+    }
+  }
+
+  // 注册 AVSession 控制命令监听
+  private setSessionCommandListeners() {
+    if (!this.session) {
+      return
+    }
+    try {
+      this.session.on('play', () => {
+        if (this.avPlayer && !this.isPlaying) {
+          this.avPlayer.play()
+        }
+      })
+      this.session.on('pause', () => {
+        if (this.avPlayer && this.isPlaying) {
+          this.avPlayer.pause()
+        }
+      })
+      this.session.on('playNext', () => {
+        this.playNext()
+      })
+      this.session.on('playPrevious', () => {
+        this.playPrev()
+      })
+    } catch (e) {
+      console.error('setSessionCommandListeners error:', JSON.stringify(e))
+    }
+  }
+
+  // 更新 AVSession 媒体元数据（歌名、歌手、时长、封面、歌词）
+  private async updateSessionMetadata() {
+    if (!this.session || !this.currentSong) {
+      return
+    }
+    try {
+      const metadata: avSession.AVMetadata = {
+        assetId: this.currentSong.id ?? '',
+        title: this.currentSong.name,
+        artist: this.currentSong.singer,
+        duration: this.duration * 1000,
+      }
+      // 加载网络封面图：先用 http 下载 buffer（cover_url 是 http 明文，ImageKit 直接传 url 可能失败）
+      if (this.currentSong.cover_url) {
+        try {
+          const httpRequest = http.createHttp()
+          const response = await httpRequest.request(this.currentSong.cover_url, {
+            method: http.RequestMethod.GET,
+            expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          })
+          httpRequest.destroy()
+          if (response.responseCode === 200 && response.result) {
+            const imageSource = image.createImageSource(response.result as ArrayBuffer)
+            const pixelMap = await imageSource.createPixelMap()
+            metadata.mediaImage = pixelMap
+          }
+        } catch (imgErr) {
+          console.error('load cover image error:', JSON.stringify(imgErr))
+        }
+      }
+      // 传递歌词（部分系统媒体控制可显示）
+      if (this.currentSong.lyric) {
+        const metadataAny = metadata as Record<string, Object>
+        metadataAny['lyrics'] = this.currentSong.lyric
+      }
+      this.session.setAVMetadata(metadata).catch((err: BusinessError) => {
+        console.error('setAVMetadata error:', err.code, err.message)
+      })
+    } catch (e) {
+      console.error('updateSessionMetadata error:', JSON.stringify(e))
+    }
+  }
+
+  // 更新 AVSession 播放状态
+  private updateSessionPlayState(isPlay: boolean) {
+    if (!this.session) {
+      return
+    }
+    try {
+      const state: avSession.AVPlaybackState = {
+        state: isPlay ? avSession.PlaybackState.PLAYBACK_STATE_PLAY : avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
+        position: {
+          elapsedTime: this.currentTime * 1000,
+          updateTime: new Date().getTime(),
+        },
+      }
+      this.session.setAVPlaybackState(state).catch((err: BusinessError) => {
+        console.error('setAVPlaybackState error:', err.code, err.message)
+      })
+    } catch (e) {
+      console.error('updateSessionPlayState error:', JSON.stringify(e))
+    }
+  }
+
+  // 销毁 AVSession
+  private destroySession() {
+    if (this.session) {
+      try {
+        this.session.off('play')
+        this.session.off('pause')
+        this.session.off('playNext')
+        this.session.off('playPrevious')
+        this.session.deactivate().catch(() => {})
+        this.session = null
+      } catch (e) {
+        console.error('destroySession error:', JSON.stringify(e))
+      }
+    }
   }
 
   // 释放播放器
@@ -223,6 +396,7 @@ export struct MusicHome {
 
   aboutToDisappear() {
     this.releasePlayer()
+    this.destroySession()
   }
 
   build() {

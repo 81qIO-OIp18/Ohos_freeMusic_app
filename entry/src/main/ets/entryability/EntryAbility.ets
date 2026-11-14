@@ -52,5 +52,6 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    // 注意：后台长时任务需在前台（播放开始时）就启动，由 MusicHome 的播放状态控制
   }
 }
