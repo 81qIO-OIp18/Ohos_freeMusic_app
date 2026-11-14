@@ -3,6 +3,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import { hmScreenManager } from 'library';
+import { playerManager } from '../utils/PlayerManager';
+import { StorageManager } from '../utils/StorageManager';
 
 const DOMAIN = 0x0000;
 
@@ -16,6 +18,7 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    playerManager.destroy();
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -24,12 +27,23 @@ export default class EntryAbility extends UIAbility {
     hmScreenManager.ctx = this.context;
     // 开启沉浸式
     hmScreenManager.full()
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
-        return;
-      }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+
+    // 初始化持久化存储（必须在 loadContent 之前完成）
+    StorageManager.init(this.context).then(() => {
+      windowStage.loadContent('pages/Index', (err) => {
+        if (err.code) {
+          hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+          return;
+        }
+        hilog.info(DOMAIN, 'testTag', '%{public}s', 'Succeeded in loading the content.');
+      });
+    }).catch(() => {
+      hilog.error(DOMAIN, 'testTag', 'StorageManager init failed: %{public}s');
+      windowStage.loadContent('pages/Index', (err) => {
+        if (err.code) {
+          hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+        }
+      });
     });
 
     try {

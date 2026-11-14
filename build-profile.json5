@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "D:/AI_Workspace/app/Epic_free_game.p12",
-          "storePassword": "00000026214FE530FF7A4E26261C38609D92AC157E0807BA7D273B64C7A2A6833FB4325DB05F40943BBF7B78D5AE069BF23EFDF6DC7A",
-          "keyAlias": "Epic_free_game_message",
-          "keyPassword": "00000026E87B90055868CF1700D3A6EB617F9B834649C0782F6888E64B277F6C47F5F9F1D1538800C24F240EB84D050040DE54A133EC",
+          "certpath": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001BAC55BCC9CF6F1A09ACAB4B83D4F5D174DFF78D970E7715066F07048159385D7E18EBDE0FF0C218",
+          "profile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.p7b",
           "signAlg": "SHA256withECDSA",
-          "profile": "D:/AI_Workspace/app/Epic_free_game_messageRelease (1).p7b",
-          "certpath": "D:/AI_Workspace/app/Epic_free_game_message.cer"
+          "storeFile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.p12",
+          "storePassword": "0000001B0FF1DFD814A7089C85CC72BA99009AD1B0406E5830F96A4A29C874EC83FFC6301487C0DEFA2825"
         }
       }
     ],
