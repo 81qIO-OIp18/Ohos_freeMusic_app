@@ -1,0 +1,60 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "D:/AI_Workspace/app/Epic_free_game.p12",
+          "storePassword": "00000026214FE530FF7A4E26261C38609D92AC157E0807BA7D273B64C7A2A6833FB4325DB05F40943BBF7B78D5AE069BF23EFDF6DC7A",
+          "keyAlias": "Epic_free_game_message",
+          "keyPassword": "00000026E87B90055868CF1700D3A6EB617F9B834649C0782F6888E64B277F6C47F5F9F1D1538800C24F240EB84D050040DE54A133EC",
+          "signAlg": "SHA256withECDSA",
+          "profile": "D:/AI_Workspace/app/Epic_free_game_messageRelease (1).p7b",
+          "certpath": "D:/AI_Workspace/app/Epic_free_game_message.cer"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "26.0.0",
+        "compatibleSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "library",
+      "srcPath": "./library",
+    }
+  ]
+}

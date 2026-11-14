@@ -1,0 +1,72 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#000000"
+    },
+    {
+      "name": "page_bg",
+      "value": "#000000"
+    },
+    {
+      "name": "card_bg",
+      "value": "#1C1C1E"
+    },
+    {
+      "name": "text_primary",
+      "value": "#E5E5E7"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#B0B0B5"
+    },
+    {
+      "name": "text_body",
+      "value": "#A8A8AE"
+    },
+    {
+      "name": "text_tertiary",
+      "value": "#8A8A90"
+    },
+    {
+      "name": "divider",
+      "value": "#2C2C2E"
+    },
+    {
+      "name": "accent",
+      "value": "#0A84FF"
+    },
+    {
+      "name": "button_text",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "button_disabled_bg",
+      "value": "#2C2C2E"
+    },
+    {
+      "name": "button_disabled_text",
+      "value": "#7A7A80"
+    },
+    {
+      "name": "tag_claimable_text",
+      "value": "#4DA3FF"
+    },
+    {
+      "name": "tag_pending_text",
+      "value": "#FFB020"
+    },
+    {
+      "name": "tag_pending_bg",
+      "value": "#3A2A0F"
+    },
+    {
+      "name": "tag_overlay_bg",
+      "value": "#F2FFFFFF"
+    },
+    {
+      "name": "icon_primary",
+      "value": "#E5E5E7"
+    }
+  ]
+}
