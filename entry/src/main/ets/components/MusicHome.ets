@@ -2,6 +2,7 @@ import { media } from '@kit.MediaKit'
 import { promptAction } from '@kit.ArkUI'
 import { SongItem, SongDetail } from '../viewmodles/commons'
 import { MUSIC_free_list_API, MUSIC_free_API } from '../apis'
+import { parseLrc, findLrcIndex, fmtMs, LrcLine } from '../utils/LrcUtils'
 
 /**
  * 免费音乐首页（搜索 + 播放）
@@ -17,8 +18,14 @@ export struct MusicHome {
   // 当前播放
   @State currentSong: SongDetail | null = null
   @State isPlaying: boolean = false
-  @State currentTime: number = 0
-  @State duration: number = 0
+  @State currentTime: number = 0 // 秒
+  @State duration: number = 0 // 秒
+  @State playlist: SongItem[] = [] // 当前播放列表（搜索结果）
+  @State currentIndex: number = -1 // 当前播放歌曲在列表中的索引
+  @State lrcLines: LrcLine[] = [] // 解析后的歌词
+  @State lrcIndex: number = -1 // 当前歌词行索引
+  @State showFullPlayer: boolean = false // 是否展开全屏播放器
+  @State isSeeking: boolean = false // 是否正在拖动进度条
   avPlayer: media.AVPlayer | null = null
 
   // 搜索
@@ -53,10 +60,21 @@ export struct MusicHome {
   // 播放某首歌
   private async playSong(song: SongItem) {
     if (this.currentSong && this.currentSong.name === song.name && this.currentSong.singer === song.artists) {
-      // 同一首歌，切换播放/暂停
       this.togglePlay()
       return
     }
+    // 记录播放列表与索引
+    const idx = this.searchResults.findIndex((s: SongItem) =>
+    s.index === song.index && s.name === song.name)
+    if (idx >= 0) {
+      this.playlist = this.searchResults
+      this.currentIndex = idx
+    }
+    await this.loadAndPlay(song)
+  }
+
+  // 加载详情并播放
+  private async loadAndPlay(song: SongItem) {
     try {
       const detail = await MUSIC_free_API(this.searchKeyword.trim(), song.index)
       if (!detail || !detail.play_url) {
@@ -66,6 +84,9 @@ export struct MusicHome {
       this.currentSong = detail
       this.duration = detail.duration_sec ?? 0
       this.currentTime = 0
+      // 解析歌词
+      this.lrcLines = detail.lyric ? parseLrc(detail.lyric) : []
+      this.lrcIndex = -1
       await this.startPlayer(detail.play_url)
     } catch (e) {
       console.error('playSong error:', JSON.stringify(e))
@@ -73,17 +94,39 @@ export struct MusicHome {
     }
   }
 
+  // 上一首
+  private playPrev() {
+    if (this.playlist.length === 0 || this.currentIndex < 0) {
+      return
+    }
+    const prev = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length
+    this.currentIndex = prev
+    this.loadAndPlay(this.playlist[prev])
+  }
+
+  // 下一首
+  private playNext() {
+    if (this.playlist.length === 0 || this.currentIndex < 0) {
+      return
+    }
+    const next = (this.currentIndex + 1) % this.playlist.length
+    this.currentIndex = next
+    this.loadAndPlay(this.playlist[next])
+  }
+
   // 启动播放器
   private async startPlayer(url: string) {
     await this.releasePlayer()
     try {
-      console.info('startPlayer: createAVPlayer, url=', url)
+      console.info('startPlayer: createAVPlayer')
       const player = await media.createAVPlayer()
       this.avPlayer = player
 
       // 等待状态机进入 initialized（设置 url 后异步触发），超时 15s
-      let initializedResolve: () => void = () => {}
-      let initializedReject: (err: Error) => void = () => {}
+      let initializedResolve: () => void = () => {
+      }
+      let initializedReject: (err: Error) => void = () => {
+      }
       const initializedPromise = new Promise<void>((resolve, reject) => {
         initializedResolve = resolve
         initializedReject = reject
@@ -93,7 +136,6 @@ export struct MusicHome {
       }, 15000)
 
       // stateChange：跟踪播放器状态机变化
-      // 必须在 idle 状态下、设置资源(url)前注册，否则可能漏报
       player.on('stateChange', (state: string) => {
         console.info('AVPlayer stateChange:', state)
         if (state === 'initialized') {
@@ -103,6 +145,10 @@ export struct MusicHome {
           this.isPlaying = true
         } else if (state === 'paused' || state === 'stopped') {
           this.isPlaying = false
+        } else if (state === 'completed') {
+          // 播放完成，自动下一首
+          this.isPlaying = false
+          this.playNext()
         }
       })
       // error：必要事件，同样需在设置资源前注册
@@ -112,30 +158,31 @@ export struct MusicHome {
         clearTimeout(initTimer)
         initializedReject(new Error(`播放器错误:${err.code}`))
       })
-      // 进度与时长：AVPlayer 回调单位为毫秒，需转秒
+      // 进度与时长：AVPlayer 回调单位为毫秒
       player.on('timeUpdate', (time: number) => {
-        this.currentTime = Math.floor(time / 1000)
+        if (!this.isSeeking) {
+          this.currentTime = Math.floor(time / 1000)
+        }
+        // 更新歌词高亮
+        if (this.lrcLines.length > 0) {
+          this.lrcIndex = findLrcIndex(this.lrcLines, time)
+        }
       })
       player.on('durationUpdate', (dur: number) => {
         this.duration = Math.floor(dur / 1000)
       })
-      // seekDone：仅用于响应 seek() 请求完成，不代表进入播放态
       player.on('seekDone', (seekDoneTime: number) => {
         console.info('AVPlayer seek succeeded, seek time is', seekDoneTime)
       })
 
       // 设置资源，等待进入 initialized 后再 prepare
       player.url = url
-      console.info('startPlayer: url set, waiting for initialized state')
       await initializedPromise
-      console.info('startPlayer: initialized, calling prepare()')
       await player.prepare()
-      console.info('startPlayer: prepare() done, calling play()')
       await player.play()
-      console.info('startPlayer: play() done')
     } catch (e) {
       const err = e as BusinessError
-      console.error(`startPlayer failed: code=${err?.code}, message=${err?.message}, name=${err?.name}`)
+      console.error(`startPlayer failed: code=${err?.code}, message=${err?.message}`)
       this.isPlaying = false
       promptAction.showToast({ message: `播放失败:${err?.code ?? err?.message ?? ''}` })
     }
@@ -151,6 +198,14 @@ export struct MusicHome {
     } else {
       this.avPlayer.play()
     }
+  }
+
+  // 拖动进度条跳转
+  private onSeek(sec: number) {
+    if (!this.avPlayer || this.duration <= 0) {
+      return
+    }
+    this.avPlayer.seek(sec * 1000,)
   }
 
   // 释放播放器
@@ -170,81 +225,80 @@ export struct MusicHome {
     this.releasePlayer()
   }
 
-  // 秒 -> mm:ss
-  private fmtTime(s: number): string {
-    const m = Math.floor(s / 60)
-    const sec = s % 60
-    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
-  }
-
   build() {
-    Column() {
-      // 顶部栏
-      Row() {
-        Text('免费音乐')
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-        Blank()
-        Text('切换平台')
-          .fontSize(13)
-          .fontColor($r('app.color.accent'))
-          .onClick(() => {
-            this.onSwitchPlatform()
-          })
-      }
-      .width('100%')
-      .height(48)
-
-      // 搜索框
-      Row() {
-        // SymbolGlyph($r('sys.symbol.search'))
-        //   .fontSize(16)
-        //   .fontColor([$r('app.color.text_tertiary')])
-        TextInput({ placeholder: '搜索歌曲或歌手', text: this.searchKeyword })
-          .layoutWeight(1)
-          .fontSize(14)
-          .backgroundColor(Color.Transparent)
-          .margin({ left: 6 })
-          .onChange((val: string) => {
-            this.searchKeyword = val
-          })
-          .onSubmit(() => {
-            this.doSearch()
-          })
-        if (this.isSearching) {
-          Text('取消')
+    Stack() {
+      Column() {
+        // 顶部栏
+        Row() {
+          Text('免费音乐')
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
+          Blank()
+          Text('切换平台')
             .fontSize(13)
             .fontColor($r('app.color.accent'))
-            .margin({ left: 8 })
             .onClick(() => {
-              this.exitSearch()
+              this.onSwitchPlatform()
             })
+        }
+        .width('100%')
+        .height(48)
+
+        // 搜索框
+        Row() {
+          TextInput({ placeholder: '搜索歌曲或歌手', text: this.searchKeyword })
+            .layoutWeight(1)
+            .fontSize(14)
+            .backgroundColor(Color.Transparent)
+            .margin({ left: 6 })
+            .onChange((val: string) => {
+              this.searchKeyword = val
+            })
+            .onSubmit(() => {
+              this.doSearch()
+            })
+          if (this.isSearching) {
+            Text('取消')
+              .fontSize(13)
+              .fontColor($r('app.color.accent'))
+              .margin({ left: 8 })
+              .onClick(() => {
+                this.exitSearch()
+              })
+          }
+        }
+        .width('100%')
+        .height(38)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(19)
+        .backgroundColor($r('app.color.card_bg'))
+        .margin({ top: 4 })
+
+        // 内容区
+        if (this.isSearching) {
+          this.SearchResultsView()
+        } else {
+          this.HomeHintView()
+        }
+
+        // 底部播放栏
+        if (this.currentSong) {
+          this.PlayerBarView()
         }
       }
       .width('100%')
-      .height(38)
-      .padding({ left: 12, right: 12 })
-      .borderRadius(19)
-      .backgroundColor($r('app.color.card_bg'))
-      .margin({ top: 4 })
+      .height('100%')
+      .backgroundColor($r('app.color.page_bg'))
+      .padding({ left: 16, right: 16, bottom: 8 })
 
-      // 内容区
-      if (this.isSearching) {
-        this.SearchResultsView()
-      } else {
-        this.HomeHintView()
-      }
-
-      // 底部播放栏
-      if (this.currentSong) {
-        this.PlayerBarView()
+      // 全屏播放器
+      if (this.showFullPlayer) {
+        this.FullPlayerView()
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_bg'))
-    .padding({ left: 16, right: 16, bottom: 8 })
   }
 
   // 搜索结果
@@ -334,9 +388,6 @@ export struct MusicHome {
   HomeHintView() {
     Column() {
       Column() {
-        // SymbolGlyph($r('sys.symbol.music_note'))
-        //   .fontSize(48)
-        //   .fontColor([$r('app.color.accent')])
         Text('搜索喜爱的歌曲')
           .fontSize(16)
           .fontColor($r('app.color.text_primary'))
@@ -355,21 +406,10 @@ export struct MusicHome {
     .layoutWeight(1)
   }
 
-  // 底部播放栏
+  // 底部迷你播放栏
   @Builder
   PlayerBarView() {
     Column() {
-      // 进度条
-      Progress({
-        value: this.duration > 0 ? (this.currentTime / this.duration) * 100 : 0,
-        total: 100,
-        type: ProgressType.Linear
-      })
-        .width('100%')
-        .height(2)
-        .color($r('app.color.accent'))
-        .backgroundColor($r('app.color.divider'))
-
       Row() {
         // 封面
         if (this.currentSong?.cover_url) {
@@ -387,9 +427,6 @@ export struct MusicHome {
                 angle: 135,
                 colors: [['#5B8DEF', 0.0], ['#34495E', 1.0]]
               })
-            // SymbolGlyph($r('sys.symbol.music_note'))
-            //   .fontSize(20)
-            //   .fontColor([Color.White])
           }
           .width(40)
           .height(40)
@@ -397,31 +434,53 @@ export struct MusicHome {
           .clip(true)
         }
 
-        // 歌名 + 时间
+        // 歌名 + 歌手
         Column() {
           Text(this.currentSong?.name ?? '')
             .fontSize(13)
             .fontColor($r('app.color.text_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(`${this.fmtTime(this.currentTime)} / ${this.fmtTime(this.duration)}`)
+          Text(this.currentSong?.singer ?? '')
             .fontSize(10)
             .fontColor($r('app.color.text_tertiary'))
             .margin({ top: 2 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         .margin({ left: 10 })
+        .onClick(() => {
+          this.showFullPlayer = true
+        })
+
+        // 上一首
+        SymbolGlyph($r('sys.symbol.backward_end_fill'))
+          .fontSize(20)
+          .fontColor([$r('app.color.text_primary')])
+          .margin({ right: 8 })
+          .onClick(() => {
+            this.playPrev()
+          })
 
         // 播放/暂停
-        SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
+        SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
           .fontSize(28)
           .fontColor([$r('app.color.accent')])
           .onClick(() => {
             this.togglePlay()
           })
+
+        // 下一首
+        SymbolGlyph($r('sys.symbol.forward_end_fill'))
+          .fontSize(20)
+          .fontColor([$r('app.color.text_primary')])
+          .margin({ left: 8 })
+          .onClick(() => {
+            this.playNext()
+          })
       }
-      //熊出没
       .width('100%')
       .padding({
         left: 12,
@@ -434,5 +493,175 @@ export struct MusicHome {
     .backgroundColor($r('app.color.card_bg'))
     .borderRadius(12)
     .margin({ top: 8 })
+  }
+
+  // 全屏播放器
+  @Builder
+  FullPlayerView() {
+    Column() {
+      // 顶部栏
+      Row() {
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(24)
+          .fontColor([Color.White])
+          .onClick(() => {
+            this.showFullPlayer = false
+          })
+        Column() {
+          Text(this.currentSong?.name ?? '')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.currentSong?.singer ?? '')
+            .fontSize(12)
+            .fontColor(Color.White)
+            .opacity(0.7)
+            .margin({ top: 2 })
+        }
+        .layoutWeight(1)
+        .margin({ left: 16 })
+        .alignItems(HorizontalAlign.Center)
+
+        Blank().width(24)
+      }
+      .width('100%')
+      .padding({
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 12
+      })
+
+      // 封面
+      if (this.currentSong?.cover_url) {
+        Image(this.currentSong.cover_url)
+          .width(240)
+          .height(240)
+          .borderRadius(120)
+          .objectFit(ImageFit.Cover)
+          .margin({ top: 24 })
+      } else {
+        Stack() {
+          Column()
+            .width('100%')
+            .height('100%')
+            .linearGradient({
+              angle: 135,
+              colors: [['#5B8DEF', 0.0], ['#34495E', 1.0]]
+            })
+        }
+        .width(240)
+        .height(240)
+        .borderRadius(120)
+        .margin({ top: 24 })
+      }
+
+      // 歌词区域
+      Column() {
+        if (this.lrcLines.length === 0) {
+          Text('暂无歌词')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .opacity(0.5)
+        } else {
+          List() {
+            ForEach(this.lrcLines, (line: LrcLine, index: number) => {
+              ListItem() {
+                Text(line.text)
+                  .fontSize(index === this.lrcIndex ? 16 : 13)
+                  .fontWeight(index === this.lrcIndex ? FontWeight.Bold : FontWeight.Normal)
+                  .fontColor(index === this.lrcIndex ? Color.White : Color.White)
+                  .opacity(index === this.lrcIndex ? 1 : 0.4)
+                  .textAlign(TextAlign.Center)
+                  .width('100%')
+              }
+            }, (line: LrcLine, index: number) => `${index}_${line.time}`)
+          }
+          .width('100%')
+          .height(160)
+          .scrollBar(BarState.Off)
+          .alignListItem(ListItemAlign.Center)
+        }
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .padding({ left: 24, right: 24 })
+      .margin({ top: 24 })
+
+      // 进度条
+      Column() {
+        Slider({
+          value: this.currentTime,
+          min: 0,
+          max: this.duration > 0 ? this.duration : 1,
+          step: 1,
+          style: SliderStyle.OutSet
+        })
+          .width('100%')
+          .blockColor($r('app.color.accent'))
+          .selectedColor($r('app.color.accent'))
+          .trackColor(Color.White)
+          .opacity(0.6)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            if (mode === SliderChangeMode.Moving) {
+              this.isSeeking = true
+              this.currentTime = Math.floor(value)
+            } else if (mode === SliderChangeMode.End) {
+              this.isSeeking = false
+              this.onSeek(Math.floor(value))
+            }
+          })
+        Row() {
+          Text(fmtMs(this.currentTime * 1000))
+            .fontSize(11)
+            .fontColor(Color.White)
+            .opacity(0.7)
+          Blank()
+          Text(fmtMs(this.duration * 1000))
+            .fontSize(11)
+            .fontColor(Color.White)
+            .opacity(0.7)
+        }
+        .width('100%')
+        .margin({ top: 4 })
+      }
+      .width('100%')
+      .padding({ left: 24, right: 24 })
+
+      // 控制按钮
+      Row() {
+        SymbolGlyph($r('sys.symbol.backward_end_fill'))
+          .fontSize(36)
+          .fontColor([Color.White])
+          .onClick(() => {
+            this.playPrev()
+          })
+        SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
+          .fontSize(56)
+          .fontColor([Color.White])
+          .margin({ left: 48, right: 48 })
+          .onClick(() => {
+            this.togglePlay()
+          })
+        SymbolGlyph($r('sys.symbol.forward_end_fill'))
+          .fontSize(36)
+          .fontColor([Color.White])
+          .onClick(() => {
+            this.playNext()
+          })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 16, bottom: 32 })
+    }
+    .width('100%')
+    .height('100%')
+    .linearGradient({
+      angle: 180,
+      colors: [['#1a1a2e', 0.0], ['#16213e', 0.5], ['#0f3460', 1.0]]
+    })
   }
 }
