@@ -4,6 +4,7 @@ import { GlobalVariable, Throttle } from 'library'
 import { gerEPIC_free_game_API, gerEPIC_free_game_MOCK_API } from '../apis'
 import { GameItem } from '../viewmodles/commons'
 import { OtherHome } from '../components/OtherHome'
+import { MusicHome } from '../components/MusicHome'
 
 interface PlatformOption {
   key: string
@@ -316,6 +317,14 @@ struct Index {
               this.refresh()
             })
           }
+        } else if (this.selectedPlatform === 'music') {
+          MusicHome({
+            onSwitchPlatform: () => {
+              this.selectedPlatform = ''
+            }
+          })
+            .width('100%')
+            .layoutWeight(1)
         } else {
           OtherHome({
             platformName: this.getPlatformName(this.selectedPlatform),

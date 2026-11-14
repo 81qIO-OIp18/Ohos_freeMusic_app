@@ -31,8 +31,8 @@ instance.interceptors.response.use((response: AxiosResponse) => {
   // http状态
   // 业务状态
   const res = response.data as ResponseData // 定义数据
-  // 兼容多种成功码：10000、1 等
-  if (res.code === 10000 || res.code === 1) {
+  // 兼容多种成功码：10000、1、200 等
+  if (res.code === 10000 || res.code === 1 || res.code === 200) {
     // 此时说明请求成功
     return response.data.data // fullfiled // 这里注意： 不能用res.data返回
 
@@ -57,20 +57,20 @@ instance.interceptors.response.use((response: AxiosResponse) => {
 
 export class HMRequest {
   // get请求只能发送get参数/query参数/查询参数/地址栏参数
-  static get<T>(url: string, params?: object) {
+  static get<T>(url: string, params?: Record<string, Object>) {
     return instance.get<null, T>(url, { params })
   }
 
   // 请求体参数
-  static post<T>(url: string, data?: object) {
+  static post<T>(url: string, data?: Record<string, Object>) {
     return instance.post<null, T>(url, data)
   }
 
-  static put<T>(url: string, data?: object) {
+  static put<T>(url: string, data?: Record<string, Object>) {
     return instance.put<null, T>(url, data)
   }
 
-  static delete<T>(url: string, params?: object) {
+  static delete<T>(url: string, params?: Record<string, Object>) {
     return instance.delete<null, T>(url, { params })
   }
 
