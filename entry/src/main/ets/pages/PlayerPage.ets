@@ -1,42 +1,114 @@
-import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
+import { GlobalVariable } from 'library'
 import { SongDetail, SongItem } from '../viewmodles/commons'
 import { playerManager } from '../utils/PlayerManager'
 import { parseLrc, findLrcIndex, fmtMs, LrcLine } from '../utils/LrcUtils'
 import { window } from '@kit.ArkUI'
 
-@HMRouter({ pageUrl: 'player' })
-@Entry
+/**
+ * 全屏模态播放器（通过 bindContentCover 弹出，非独立页面）
+ */
 @Component
-export struct PlayerPage {
+export struct PlayerPanel {
+  onClose: () => void = () => {
+  }
   @StorageLink('pm_song') songStr: string = ''
-  @StorageLink('pm_playing') isPlaying: boolean = false
+  @StorageLink('pm_playing') @Watch('onPlayingChange') isPlaying: boolean = false
   @StorageLink('pm_time') currentTime: number = 0
   @StorageLink('pm_duration') duration: number = 0
   @StorageLink('pm_lrc') lrcStr: string = ''
-  @StorageLink('pm_lrcIndex') lrcIndex: number = -1
+  @StorageLink('pm_lrcIndex') @Watch('onLrcIndexChange') lrcIndex: number = -1
+  // 状态栏高度（应用已开启沉浸式，内容延伸到状态栏下方）
+  @StorageProp(GlobalVariable.SAFE_TOP_HEIGHT) topHeight: number = 0
   @State isSeeking: boolean = false
   @State seekValue: number = 0
+  // 封面旋转角度（定时器驱动，播放时持续旋转、暂停定格）
+  @State coverAngle: number = 0
+  private rotateTimer: number = -1
+  // 歌词列表滚动控制器
+  private lyricScroller: Scroller = new Scroller()
+
+  private startRotate() {
+    if (this.rotateTimer !== -1) {
+      return
+    }
+    // 每 50ms 推进 0.9°（约 20 秒一圈），配合 rotate 上的线性补间实现平滑旋转
+    this.rotateTimer = setInterval(() => {
+      this.coverAngle = (this.coverAngle + 0.9) % 360
+    }, 50)
+  }
+
+  private stopRotate() {
+    if (this.rotateTimer !== -1) {
+      clearInterval(this.rotateTimer)
+      this.rotateTimer = -1
+    }
+  }
+
+  onPlayingChange() {
+    if (this.isPlaying) {
+      this.startRotate()
+    } else {
+      this.stopRotate()
+    }
+  }
+
+  // 当前歌词行变化时，自动滚动到居中位置
+  onLrcIndexChange() {
+    if (this.lrcIndex < 0) {
+      return
+    }
+    const target = this.lrcIndex
+    // 延迟到本帧布局完成后再滚动，避免列表尚未渲染导致滚动无效
+    setTimeout(() => {
+      try {
+        this.lyricScroller.scrollToIndex(target, true, ScrollAlign.CENTER)
+      } catch (e) {
+        console.error('scrollToIndex error:', JSON.stringify(e))
+      }
+    }, 50)
+  }
 
   async aboutToAppear() {
-    // 仅当前页全屏沉浸式
+    // 只把系统栏染成深色与播放页保持一致，不改窗口布局
+    // （改 setWindowLayoutFullScreen 会触发窗口重新布局，关闭后首页内容整体下移）
     try {
       const ctx = getContext(this) as common.UIAbilityContext
       const win = await window.getLastWindow(ctx)
-      win.setWindowLayoutFullScreen(true)
+      win.setWindowSystemBarProperties({
+        statusBarColor: '#00000000',
+        navigationBarColor: '#00000000',
+        statusBarContentColor: '#FFFFFF',
+        navigationBarContentColor: '#FFFFFF'
+      })
     } catch (e) {
-      console.error('setWindowLayoutFullScreen error:', JSON.stringify(e))
+      console.error('setWindowSystemBarProperties error:', JSON.stringify(e))
+    }
+    // 打开面板时定位到当前歌词行
+    setTimeout(() => {
+      this.onLrcIndexChange()
+    }, 200)
+    // 若已在播放，启动封面旋转
+    if (this.isPlaying) {
+      this.startRotate()
     }
   }
 
   async aboutToDisappear() {
-    // 恢复正常布局
+    // 停止旋转定时器
+    this.stopRotate()
+    // 恢复系统栏配色
     try {
       const ctx = getContext(this) as common.UIAbilityContext
       const win = await window.getLastWindow(ctx)
-      win.setWindowLayoutFullScreen(false)
+      win.setWindowSystemBarProperties({
+        statusBarColor: '#FFFFFF',
+        navigationBarColor: '#FFFFFF',
+        statusBarContentColor: '#000000',
+        navigationBarContentColor: '#000000'
+      })
     } catch (e) {
-      console.error('restore window layout error:', JSON.stringify(e))
+      console.error('restore window system bar error:', JSON.stringify(e))
     }
   }
 
@@ -121,12 +193,12 @@ export struct PlayerPage {
             .fontSize(24)
             .fontColor([Color.White])
             .onClick(() => {
-              HMRouterMgr.pop()
+              this.onClose()
             })
         }
         .width('100%')
         .height(56)
-        .padding({ top: 36, left: 16, right: 16 })
+        .padding({ top: this.topHeight + 8, left: 16, right: 16 })
 
         // 封面图
         Column() {
@@ -136,8 +208,9 @@ export struct PlayerPage {
               .height(260)
               .borderRadius(130)
               .objectFit(ImageFit.Cover)
-              .rotate({ angle: this.isPlaying ? 360 : 0 })
-              .animation({ duration: 20000, curve: Curve.Linear, iterations: -1 })
+              .rotate({ angle: this.coverAngle })
+              // 线性补间：把离散的角度更新插值成连续旋转，消除卡顿
+              .animation({ duration: 50, curve: Curve.Linear })
               .shadow({
                 radius: 30,
                 color: 'rgba(0,0,0,0.5)',
@@ -180,17 +253,18 @@ export struct PlayerPage {
               .fontSize(13)
               .fontColor('rgba(255,255,255,0.4)')
           } else {
-            List() {
+            List({ scroller: this.lyricScroller }) {
               ForEach(this.getLrcLines(), (line: LrcLine, index: number) => {
                 ListItem() {
                   Text(line.text)
-                    .fontSize(index === this.lrcIndex ? 16 : 13)
+                    .fontSize(index === this.lrcIndex ? 18 : 14)
                     .fontWeight(index === this.lrcIndex ? FontWeight.Bold : FontWeight.Normal)
                     .fontColor(index === this.lrcIndex ? '#FFFFFF' : 'rgba(255,255,255,0.5)')
                     .opacity(index === this.lrcIndex ? 1 : 0.5)
                     .textAlign(TextAlign.Center)
                     .width('100%')
                 }
+                .padding({ top: 10, bottom: 10 })
               }, (line: LrcLine, index: number) => `${index}_${line.time}`)
             }
             .width('100%')
@@ -275,13 +349,7 @@ export struct PlayerPage {
         .width('100%')
         .justifyContent(FlexAlign.SpaceAround)
         .alignItems(VerticalAlign.Center)
-
-        // .padding({
-        //   left: 40,
-        //   right: 40,
-        //   top: 16,
-        //   bottom: 48
-        // })
+        .padding({ bottom: 24 })
       }
       .width('100%')
       .height('100%')

@@ -3,6 +3,7 @@ import { common } from '@kit.AbilityKit'
 import { SongItem, SongDetail } from '../viewmodles/commons'
 import { playerManager } from '../utils/PlayerManager'
 import { fmtMs } from '../utils/LrcUtils'
+import { PlayerPanel } from '../pages/PlayerPage'
 
 /**
  * 音乐首页：最近播放 + 搜索入口 + 迷你播放栏
@@ -16,6 +17,17 @@ export struct MusicHome {
   @StorageLink('pm_playing') isPlaying: boolean = false
   @StorageLink('pm_time') currentTime: number = 0
   @StorageLink('pm_duration') duration: number = 0
+  // 全屏模态播放器显隐
+  @State showPlayer: boolean = false
+
+  @Builder
+  playerModal() {
+    PlayerPanel({
+      onClose: () => {
+        this.showPlayer = false
+      }
+    })
+  }
 
   // 解析缓存：build 期间同一份 JSON 会被访问多次，缓存后只解析一次
   private recentCacheKey: string = ''
@@ -197,67 +209,75 @@ export struct MusicHome {
         }
       }
       .width('100%')
+      .height("100%")
       .layoutWeight(1)
 
       // 迷你播放栏
       if (this.getCurrentSong()) {
-        Row() {
-          // 封面
-          if (this.getCurrentSong()!.cover_url) {
-            Image(this.getCurrentSong()!.cover_url)
+        Stack() {
+          Row() {
+            // 封面
+            if (this.getCurrentSong()!.cover_url) {
+              Image(this.getCurrentSong()!.cover_url)
+                .width(44)
+                .height(44)
+                .borderRadius(8)
+                .objectFit(ImageFit.Cover)
+            } else {
+              Column() {
+                Text('♪')
+                  .fontSize(22)
+                  .fontColor('#FFFFFF')
+              }
               .width(44)
               .height(44)
               .borderRadius(8)
-              .objectFit(ImageFit.Cover)
-          } else {
-            Column() {
-              Text('♪')
-                .fontSize(22)
-                .fontColor('#FFFFFF')
+              .backgroundColor($r('app.color.accent'))
+              .justifyContent(FlexAlign.Center)
             }
-            .width(44)
-            .height(44)
-            .borderRadius(8)
-            .backgroundColor($r('app.color.accent'))
-            .justifyContent(FlexAlign.Center)
-          }
-          // 歌名 + 进度
-          Column() {
-            Text(this.getCurrentSong()!.name)
-              .fontSize(14)
-              .fontColor($r('app.color.text_primary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text(`${fmtMs(this.currentTime * 1000)} / ${fmtMs(this.duration * 1000)}`)
-              .fontSize(11)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 2 })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-          .margin({ left: 10 })
-          .onClick(() => {
-            HMRouterMgr.push({ pageUrl: 'player' })
-          })
-
-          // 播放/暂停
-          SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
-            .fontSize(26)
-            .fontColor([$r('app.color.text_primary')])
+            // 歌名 + 进度
+            Column() {
+              Text(this.getCurrentSong()!.name)
+                .fontSize(14)
+                .fontColor($r('app.color.text_primary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(`${fmtMs(this.currentTime * 1000)} / ${fmtMs(this.duration * 1000)}`)
+                .fontSize(11)
+                .fontColor($r('app.color.text_tertiary'))
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .margin({ left: 10 })
             .onClick(() => {
-              playerManager.togglePlay()
+              this.showPlayer = true
             })
+
+            // 播放/暂停
+            SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
+              .fontSize(26)
+              .fontColor([$r('app.color.text_primary')])
+              .onClick(() => {
+                playerManager.togglePlay()
+              })
+          }
+          .width('100%')
+          .padding(10)
+          .borderRadius(14)
+          .backgroundColor($r('app.color.card_bg'))
+          .margin({ top: 8, bottom: 8 })
         }
-        .width('100%')
-        .padding(10)
-        .borderRadius(14)
-        .backgroundColor($r('app.color.card_bg'))
-        .margin({ top: 8, bottom: 8 })
       }
     }
     .width('100%')
     .height('100%')
-
-    // .padding({ left: 16, right: 16, top: 12 })
+    .bindContentCover(this.showPlayer, this.playerModal(), {
+      modalTransition: ModalTransition.DEFAULT,
+      backgroundColor: '#000000',
+      onDisappear: () => {
+        this.showPlayer = false
+      }
+    })
   }
 }

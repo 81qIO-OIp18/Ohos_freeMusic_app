@@ -7,11 +7,11 @@
         "material": {
           "certpath": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BAC55BCC9CF6F1A09ACAB4B83D4F5D174DFF78D970E7715066F07048159385D7E18EBDE0FF0C218",
+          "keyPassword": "0000001BB17FC9AF2392DE3F82201CA5FE03152314E54D3A1F715EC43E4734E89C9E6F3ECC2CCE80736595",
           "profile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\24495\\.ohos\\config\\default_Epic_free_message_KWFUsG77Ej6mG3jePfw3Cshvj4w6_H-bSR-bXfG3TAc=.p12",
-          "storePassword": "0000001B0FF1DFD814A7089C85CC72BA99009AD1B0406E5830F96A4A29C874EC83FFC6301487C0DEFA2825"
+          "storePassword": "0000001B5278FB006ABCADE6CAFFF702BFE7782E24A81902213648026F390EBEF53CC7301EA18746AE02E0"
         }
       }
     ],
