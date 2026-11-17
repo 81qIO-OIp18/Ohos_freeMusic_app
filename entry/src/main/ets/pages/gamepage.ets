@@ -1,5 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
-import { GlobalVariable } from 'library'
+import { GlobalVariable, Throttle } from 'library'
 import { GameItem } from '../viewmodles/commons'
 import { DetailNavBar } from '../components/DetailNavBar'
 
@@ -17,6 +17,8 @@ export struct GamePage {
     end_time: ''
   }
   @State expanded: boolean = false
+  // 点击防抖：500ms 内的重复点击直接忽略
+  private clickThrottle: Throttle = new Throttle(500)
   @StorageProp(GlobalVariable.SAFE_TOP_HEIGHT)
   topHeight: number = 0
 
@@ -144,6 +146,9 @@ export struct GamePage {
                     .fontSize(13)
                     .fontColor($r('app.color.accent'))
                     .onClick(() => {
+                      if (!this.clickThrottle.canRun()) {
+                        return
+                      }
                       this.expanded = !this.expanded
                     })
                 }

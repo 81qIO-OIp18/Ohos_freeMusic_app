@@ -1,5 +1,6 @@
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
+import { Throttle } from 'library'
 import { SongItem, SongDetail } from '../viewmodles/commons'
 import { playerManager } from '../utils/PlayerManager'
 import { fmtMs } from '../utils/LrcUtils'
@@ -19,6 +20,12 @@ export struct MusicHome {
   @StorageLink('pm_duration') duration: number = 0
   // 全屏模态播放器显隐
   @State showPlayer: boolean = false
+  // 点击防抖：500ms 内的重复点击直接忽略
+  private clickThrottle: Throttle = new Throttle(500)
+
+  private canClick(): boolean {
+    return this.clickThrottle.canRun()
+  }
 
   @Builder
   playerModal() {
@@ -90,6 +97,9 @@ export struct MusicHome {
           .fontSize(13)
           .fontColor($r('app.color.accent'))
           .onClick(() => {
+            if (!this.canClick()) {
+              return
+            }
             this.onSwitchPlatform()
           })
       }
@@ -98,8 +108,9 @@ export struct MusicHome {
 
       // 搜索栏（点击跳转搜索页）
       Row() {
-        Text('🔍')
-          .fontSize(16)
+        Image($r("app.media.search"))
+          .width(16)
+          .height(16)
           .margin({ right: 8 })
         Text('搜索歌曲、歌手')
           .fontSize(15)
@@ -112,6 +123,9 @@ export struct MusicHome {
       .borderRadius(21)
       .backgroundColor($r('app.color.card_bg'))
       .onClick(() => {
+        if (!this.canClick()) {
+          return
+        }
         HMRouterMgr.push({ pageUrl: 'search' })
       })
 
@@ -149,6 +163,9 @@ export struct MusicHome {
               .fontSize(13)
               .fontColor($r('app.color.text_tertiary'))
               .onClick(() => {
+                if (!this.canClick()) {
+                  return
+                }
                 playerManager.clearRecent()
               })
           }
@@ -179,6 +196,9 @@ export struct MusicHome {
                     .fontSize(22)
                     .fontColor([$r('app.color.accent')])
                     .onClick(() => {
+                      if (!this.canClick()) {
+                        return
+                      }
                       playerManager.play(this.getRecent(), index)
                     })
 
@@ -187,6 +207,9 @@ export struct MusicHome {
                     .fontColor($r('app.color.text_tertiary'))
                     .margin({ left: 12 })
                     .onClick(() => {
+                      if (!this.canClick()) {
+                        return
+                      }
                       playerManager.removeRecent(song)
                     })
                 }
@@ -199,6 +222,9 @@ export struct MusicHome {
                 })
               }
               .onClick(() => {
+                if (!this.canClick()) {
+                  return
+                }
                 playerManager.play(this.getRecent(), index)
               })
             }, (song: SongItem, index: number) => `${index}_${song.name}`)
@@ -251,16 +277,44 @@ export struct MusicHome {
             .layoutWeight(1)
             .margin({ left: 10 })
             .onClick(() => {
+              if (!this.canClick()) {
+                return
+              }
               this.showPlayer = true
             })
 
-            // 播放/暂停
-            SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
-              .fontSize(26)
-              .fontColor([$r('app.color.text_primary')])
-              .onClick(() => {
+            // 播放/暂停（两个图标叠放，切换时淡入淡出 + 缩放，避免生硬跳变）
+            Stack() {
+              SymbolGlyph($r('sys.symbol.play_fill'))
+                .fontSize(26)
+                .fontColor([$r('app.color.text_primary')])
+                .opacity(this.isPlaying ? 0 : 1)
+                .scale({
+                  x: this.isPlaying ? 0.6 : 1,
+                  y: this.isPlaying ? 0.6 : 1
+                })
+                .animation({ duration: 200, curve: Curve.EaseOut })
+              SymbolGlyph($r('sys.symbol.pause'))
+                .fontSize(26)
+                .fontColor([$r('app.color.text_primary')])
+                .opacity(this.isPlaying ? 1 : 0)
+                .scale({
+                  x: this.isPlaying ? 1 : 0.6,
+                  y: this.isPlaying ? 1 : 0.6
+                })
+                .animation({ duration: 200, curve: Curve.EaseOut })
+            }
+            .width(36)
+            .height(36)
+            .onClick(() => {
+              //添加0.5s的延时
+              setTimeout(() => {
+                if (!this.canClick()) {
+                  return
+                }
                 playerManager.togglePlay()
-              })
+              }, 500)
+            })
           }
           .width('100%')
           .padding(10)

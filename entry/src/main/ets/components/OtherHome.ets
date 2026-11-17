@@ -1,11 +1,15 @@
 /**
  * 其他平台占位页面（非 Epic 的应用界面）
  */
+import { Throttle } from 'library'
+
 @Component
 export struct OtherHome {
   platformName: string = ''
   onBack: () => void = () => {
   }
+  // 点击防抖：500ms 内的重复点击直接忽略
+  private clickThrottle: Throttle = new Throttle(500)
 
   build() {
     Column() {
@@ -28,6 +32,9 @@ export struct OtherHome {
         .borderRadius(20)
         .padding({ left: 24, right: 24 })
         .onClick(() => {
+          if (!this.clickThrottle.canRun()) {
+            return
+          }
           this.onBack()
         })
     }

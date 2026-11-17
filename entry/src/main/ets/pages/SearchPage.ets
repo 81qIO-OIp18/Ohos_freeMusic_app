@@ -1,4 +1,5 @@
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
+import { Throttle } from 'library'
 import { SongItem } from '../viewmodles/commons'
 import { MUSIC_free_list_API } from '../apis'
 import { playerManager } from '../utils/PlayerManager'
@@ -15,6 +16,12 @@ export struct SearchPage {
   @State results: SongItem[] = []
   @State isLoading: boolean = false
   @State history: string[] = []
+  // 点击防抖：500ms 内的重复点击直接忽略
+  private clickThrottle: Throttle = new Throttle(500)
+
+  private canClick(): boolean {
+    return this.clickThrottle.canRun()
+  }
 
   aboutToAppear() {
     this.history = StorageManager.getStringArray(HISTORY_KEY)
@@ -47,6 +54,10 @@ export struct SearchPage {
     if (!kw.trim()) {
       return
     }
+    // 防抖：短时间重复触发搜索直接忽略
+    if (!this.canClick()) {
+      return
+    }
     this.keyword = kw
     this.inputText = kw
     this.addHistory(kw)
@@ -70,6 +81,9 @@ export struct SearchPage {
           .fontSize(22)
           .fontColor([$r('app.color.text_primary')])
           .onClick(() => {
+            if (!this.canClick()) {
+              return
+            }
             HMRouterMgr.pop()
           })
         Row() {
@@ -91,6 +105,9 @@ export struct SearchPage {
               .fontSize(16)
               .fontColor($r('app.color.text_tertiary'))
               .onClick(() => {
+                if (!this.canClick()) {
+                  return
+                }
                 this.inputText = ''
                 this.results = []
                 this.keyword = ''
@@ -128,6 +145,9 @@ export struct SearchPage {
                 .fontSize(13)
                 .fontColor($r('app.color.text_tertiary'))
                 .onClick(() => {
+                  if (!this.canClick()) {
+                    return
+                  }
                   this.clearHistory()
                 })
             }
@@ -148,6 +168,9 @@ export struct SearchPage {
                     .fontColor($r('app.color.text_tertiary'))
                     .margin({ left: 6 })
                     .onClick(() => {
+                      if (!this.canClick()) {
+                        return
+                      }
                       this.removeHistory(item)
                     })
                 }
@@ -224,6 +247,9 @@ export struct SearchPage {
                 .padding({ left: 4, right: 4, top: 12, bottom: 12 })
               }
               .onClick(() => {
+                if (!this.canClick()) {
+                  return
+                }
                 playerManager.play(this.results, index)
               })
             }, (song: SongItem, index: number) => `${index}_${song.index}_${song.name}`)

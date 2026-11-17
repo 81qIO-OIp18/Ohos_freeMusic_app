@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit'
-import { GlobalVariable } from 'library'
+import { GlobalVariable, Throttle } from 'library'
 import { SongDetail, SongItem } from '../viewmodles/commons'
 import { playerManager } from '../utils/PlayerManager'
 import { parseLrc, findLrcIndex, fmtMs, LrcLine } from '../utils/LrcUtils'
@@ -27,6 +27,12 @@ export struct PlayerPanel {
   private rotateTimer: number = -1
   // 歌词列表滚动控制器
   private lyricScroller: Scroller = new Scroller()
+  // 点击防抖：300ms 内的重复点击直接忽略（播放控制需要相对灵敏）
+  private clickThrottle: Throttle = new Throttle(300)
+
+  private canClick(): boolean {
+    return this.clickThrottle.canRun()
+  }
 
   private startRotate() {
     if (this.rotateTimer !== -1) {
@@ -193,6 +199,9 @@ export struct PlayerPanel {
             .fontSize(24)
             .fontColor([Color.White])
             .onClick(() => {
+              if (!this.canClick()) {
+                return
+              }
               this.onClose()
             })
         }
@@ -323,12 +332,35 @@ export struct PlayerPanel {
             .fontSize(32)
             .fontColor(['#FFFFFF'])
             .onClick(() => {
+              if (!this.canClick()) {
+                return
+              }
               playerManager.playPrev()
             })
           Column() {
-            SymbolGlyph(this.isPlaying ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
-              .fontSize(44)
-              .fontColor(['#FFFFFF'])
+            // 播放/暂停（两个图标叠放，切换时淡入淡出 + 缩放）
+            Stack() {
+              SymbolGlyph($r('sys.symbol.play_fill'))
+                .fontSize(44)
+                .fontColor(['#FFFFFF'])
+                .opacity(this.isPlaying ? 0 : 1)
+                .scale({
+                  x: this.isPlaying ? 0.6 : 1,
+                  y: this.isPlaying ? 0.6 : 1
+                })
+                .animation({ duration: 200, curve: Curve.EaseOut })
+              SymbolGlyph($r('sys.symbol.pause'))
+                .fontSize(44)
+                .fontColor(['#FFFFFF'])
+                .opacity(this.isPlaying ? 1 : 0)
+                .scale({
+                  x: this.isPlaying ? 1 : 0.6,
+                  y: this.isPlaying ? 1 : 0.6
+                })
+                .animation({ duration: 200, curve: Curve.EaseOut })
+            }
+            .width(48)
+            .height(48)
           }
           .width(64)
           .height(64)
@@ -336,6 +368,9 @@ export struct PlayerPanel {
           .backgroundColor('rgba(255,255,255,0.2)')
           .justifyContent(FlexAlign.Center)
           .onClick(() => {
+            if (!this.canClick()) {
+              return
+            }
             playerManager.togglePlay()
           })
 
@@ -343,6 +378,9 @@ export struct PlayerPanel {
             .fontSize(32)
             .fontColor(['#FFFFFF'])
             .onClick(() => {
+              if (!this.canClick()) {
+                return
+              }
               playerManager.playNext()
             })
         }

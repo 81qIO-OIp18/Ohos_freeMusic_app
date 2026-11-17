@@ -142,6 +142,9 @@ struct Index {
               .backgroundColor($r('app.color.card_bg'))
               .margin({ bottom: 12 })
               .onClick(() => {
+                if (!this.clickThrottle.canRun()) {
+                  return
+                }
                 this.selectedPlatform = item.key
               })
             }, (item: PlatformOption) => item.key)
@@ -175,6 +178,9 @@ struct Index {
                 .fontSize(13)
                 .fontColor($r('app.color.accent'))
                 .onClick(() => {
+                  if (!this.clickThrottle.canRun()) {
+                    return
+                  }
                   this.selectedPlatform = ''
                 })
             }
