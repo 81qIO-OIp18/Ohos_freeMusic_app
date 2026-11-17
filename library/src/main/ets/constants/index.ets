@@ -9,7 +9,6 @@ export class GlobalVariable {
 // 所有的请求地址
 export class HTTP_PATH {
   // static readonly HOME_CATEGORY: string = "question/type" // 请求分类的地址
-  static readonly EPIC_FREE_GAME: string = "https://oiapi.net/api/EpicFree"
   static readonly MUSIC_FREE_URL: string = "https://api.luosu.top/api/kgmusic"
 }
 

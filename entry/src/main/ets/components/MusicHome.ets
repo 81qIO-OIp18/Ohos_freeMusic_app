@@ -11,8 +11,6 @@ import { PlayerPanel } from '../pages/PlayerPage'
  */
 @Component
 export struct MusicHome {
-  onSwitchPlatform: () => void = () => {
-  }
   @StorageLink('recent_songs') recentStr: string = '[]'
   @StorageLink('pm_song') songStr: string = ''
   @StorageLink('pm_playing') isPlaying: boolean = false
@@ -88,20 +86,11 @@ export struct MusicHome {
     Column() {
       // 顶部栏
       Row() {
-        Text('免费音乐')
+        Text('拾音')
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.text_primary'))
           .layoutWeight(1)
-        Text('切换平台')
-          .fontSize(13)
-          .fontColor($r('app.color.accent'))
-          .onClick(() => {
-            if (!this.canClick()) {
-              return
-            }
-            this.onSwitchPlatform()
-          })
       }
       .width('100%')
       .margin({ bottom: 16 })

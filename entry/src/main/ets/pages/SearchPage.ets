@@ -87,11 +87,13 @@ export struct SearchPage {
             HMRouterMgr.pop()
           })
         Row() {
-          Text('🔍')
-            .fontSize(16)
-            .margin({ right: 8 })
+          Image($r("app.media.search"))
+            .width(16)
+            .height(16)
+            .margin({ left: 8 })
           TextInput({ placeholder: '搜索歌曲、歌手', text: this.inputText })
             .layoutWeight(1)
+            .padding({ left: 10 })
             .backgroundColor(Color.Transparent)
             .fontSize(15)
             .onSubmit(() => {
@@ -174,7 +176,12 @@ export struct SearchPage {
                       this.removeHistory(item)
                     })
                 }
-                .padding({ left: 12, right: 10, top: 6, bottom: 6 })
+                .padding({
+                  left: 12,
+                  right: 10,
+                  top: 6,
+                  bottom: 6
+                })
                 .borderRadius(14)
                 .backgroundColor($r('app.color.card_bg'))
                 .margin({ right: 8, bottom: 8 })
@@ -183,8 +190,9 @@ export struct SearchPage {
             .width('100%')
           } else {
             Column() {
-              Text('🔍')
-                .fontSize(48)
+              Image($r("app.media.search"))
+                .width(48)
+                .height(48)
               Text('搜索你喜欢的音乐')
                 .fontSize(14)
                 .fontColor($r('app.color.text_tertiary'))
@@ -244,7 +252,12 @@ export struct SearchPage {
                     .fontColor([$r('app.color.accent')])
                 }
                 .width('100%')
-                .padding({ left: 4, right: 4, top: 12, bottom: 12 })
+                .padding({
+                  left: 4,
+                  right: 4,
+                  top: 12,
+                  bottom: 12
+                })
               }
               .onClick(() => {
                 if (!this.canClick()) {
